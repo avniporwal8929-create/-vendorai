@@ -77,6 +77,9 @@ export default function PremiumVendorHub() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<"inventory" | "forecasting" | "stations" | "performance">("inventory");
+  
+  // Mobile Tab View Controller
+  const [activeMobileView, setActiveMobileView] = useState<"queue" | "details" | "stocks">("queue");
 
   // Forecasting sliders
   const [temperature, setTemperature] = useState(38);
@@ -153,6 +156,9 @@ export default function PremiumVendorHub() {
     setSimCoach("");
     setSimSeat("");
     setShowSimModal(false);
+    
+    // Auto switch to list on mobile to see it
+    setActiveMobileView("queue");
   };
 
   const handleManualSync = async () => {
@@ -184,76 +190,76 @@ export default function PremiumVendorHub() {
     <div className="h-full flex flex-col overflow-hidden bg-gradient-to-b from-[#090e1a] to-[#02050c] text-slate-100 font-sans antialiased">
       
       {/* 1. Global Metrics guidance row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-5 p-6 border-b border-slate-900/60 bg-slate-950/20 shrink-0">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 p-4 md:p-6 border-b border-slate-900/60 bg-slate-955/20 shrink-0">
         
         {/* Metric 1: Vendor SLA Performance */}
-        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-indigo-500/20 transition-all duration-300">
-          <div className="p-2.5 bg-indigo-650/10 text-indigo-400 border border-indigo-500/20 rounded-xl">
-            <Star className="w-5 h-5 text-indigo-400" />
+        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-3 md:p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-2.5 md:gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-indigo-500/20 transition-all duration-300">
+          <div className="p-2 bg-indigo-650/10 text-indigo-400 border border-indigo-500/20 rounded-lg shrink-0">
+            <Star className="w-4 h-4 md:w-5 md:h-5 text-indigo-400" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Kitchen rating SLA</span>
-            <span className="text-md font-extrabold text-slate-200 block mt-1 tracking-tight">4.8 ⭐ <span className="text-xs text-slate-500 font-semibold">(NDLS Front Kitchen)</span></span>
+          <div className="min-w-0">
+            <span className="text-[8px] md:text-[10px] font-bold text-slate-550 uppercase tracking-wider block truncate">Kitchen SLA</span>
+            <span className="text-xs md:text-md font-extrabold text-slate-200 block mt-0.5 tracking-tight truncate">4.8 ⭐</span>
           </div>
         </div>
 
         {/* Metric 2: Orders state */}
-        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-emerald-500/20 transition-all duration-300">
-          <div className="p-2.5 bg-emerald-650/10 text-emerald-400 border border-emerald-500/20 rounded-xl">
-            <ShoppingCart className="w-5 h-5 text-emerald-400" />
+        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-3 md:p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-2.5 md:gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-emerald-500/20 transition-all duration-300">
+          <div className="p-2 bg-emerald-650/10 text-emerald-400 border border-emerald-500/20 rounded-lg shrink-0">
+            <ShoppingCart className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Fulfillments Pending</span>
-            <span className="text-md font-extrabold text-slate-200 block mt-1 tracking-tight">
+          <div className="min-w-0">
+            <span className="text-[8px] md:text-[10px] font-bold text-slate-550 uppercase tracking-wider block truncate">Fulfillments</span>
+            <span className="text-xs md:text-md font-extrabold text-slate-200 block mt-0.5 tracking-tight truncate">
               {orders.filter(o => o.status !== "Delivered" && o.status !== "Cancelled").length} active
             </span>
           </div>
         </div>
 
         {/* Metric 3: Safety stock warnings */}
-        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-amber-500/20 transition-all duration-300">
-          <div className="p-2.5 bg-amber-650/10 text-amber-400 border border-amber-500/20 rounded-xl">
-            <AlertTriangle className="w-5 h-5 text-amber-400" />
+        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-3 md:p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-2.5 md:gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-amber-500/20 transition-all duration-300">
+          <div className="p-2 bg-amber-650/10 text-amber-400 border border-amber-500/20 rounded-lg shrink-0">
+            <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-amber-400" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Safety Stock Alert</span>
-            <span className={`text-md font-extrabold block mt-1 tracking-tight ${lowStockItems.length > 0 ? "text-amber-400 animate-pulse" : "text-slate-200"}`}>
-              {lowStockItems.length} shortages
+          <div className="min-w-0">
+            <span className="text-[8px] md:text-[10px] font-bold text-slate-555 uppercase tracking-wider block truncate">Safety Alert</span>
+            <span className={`text-xs md:text-md font-extrabold block mt-0.5 tracking-tight truncate ${lowStockItems.length > 0 ? "text-amber-400 animate-pulse" : "text-slate-200"}`}>
+              {lowStockItems.length} items
             </span>
           </div>
         </div>
 
         {/* Metric 4: Platform hotspots */}
-        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-violet-500/20 transition-all duration-300">
-          <div className="p-2.5 bg-violet-650/10 text-violet-400 border border-violet-500/20 rounded-xl">
-            <Activity className="w-5 h-5 text-violet-400 animate-pulse" />
+        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-3 md:p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-2.5 md:gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-violet-500/20 transition-all duration-300">
+          <div className="p-2 bg-violet-650/10 text-violet-400 border border-violet-500/20 rounded-lg shrink-0">
+            <Activity className="w-4 h-4 md:w-5 md:h-5 text-violet-400 animate-pulse" />
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Platform Hotspots</span>
-            <span className="text-md font-extrabold text-slate-200 block mt-1 tracking-tight">NDLS Platform 3 & 5</span>
+          <div className="min-w-0">
+            <span className="text-[8px] md:text-[10px] font-bold text-slate-555 uppercase tracking-wider block truncate">Hotspots</span>
+            <span className="text-xs md:text-md font-extrabold text-slate-200 block mt-0.5 tracking-tight truncate">Pl 3 & 5</span>
           </div>
         </div>
 
       </div>
 
       {/* 2. Control room actions */}
-      <div className="h-14 border-b border-slate-900/60 bg-slate-950/10 px-6 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0"></span>
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-            Active Hub: {activeStationFilter === "All" ? "All Platforms" : activeStationFilter.replace(" Railway Station", "")}
+      <div className="h-14 border-b border-slate-900/60 bg-slate-950/10 px-4 md:px-6 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0"></span>
+          <span className="text-[10px] md:text-xs font-bold text-slate-450 uppercase tracking-wider truncate">
+            {activeStationFilter === "All" ? "All Terminals" : activeStationFilter.replace(" Railway Station", "")}
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex items-center gap-2 md:gap-3 shrink-0">
+          <div className="relative hidden sm:block">
             <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2" />
             <input
               type="text"
-              placeholder="Search PNR / Train"
+              placeholder="Search PNR..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-[#0b101d]/80 border border-slate-800/60 rounded-lg pl-8.5 pr-3 py-1.5 text-xs text-slate-250 placeholder-slate-550 focus:outline-none focus:border-indigo-500/60 transition-all font-medium min-w-[200px]"
+              className="bg-[#0b101d]/85 border border-slate-800/60 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-250 placeholder-slate-550 focus:outline-none focus:border-indigo-500/60 transition-all min-w-[120px]"
             />
           </div>
 
@@ -266,28 +272,30 @@ export default function PremiumVendorHub() {
               setSimSeat(Math.floor(1 + Math.random() * 60).toString());
               setShowSimModal(true);
             }}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-slate-100 rounded-lg text-xs font-bold shadow-lg shadow-indigo-650/20 border border-indigo-400/20 transition-all hover:scale-102 cursor-pointer"
+            className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-slate-100 rounded-lg text-[10px] md:text-xs font-bold shadow border border-indigo-400/20 transition-all hover:scale-102 cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
-            New Order
+            Add Order
           </button>
 
           <button
             onClick={handleManualSync}
             disabled={isSyncing}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#0b101d] border border-slate-850 hover:border-slate-700 text-slate-350 hover:text-slate-200 text-xs font-semibold rounded-lg transition-all cursor-pointer"
+            className="flex items-center gap-1 px-3 py-1.5 bg-[#0b101d] border border-slate-850 hover:border-slate-700 text-slate-350 hover:text-slate-200 text-[10px] md:text-xs font-semibold rounded-lg transition-all cursor-pointer"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-indigo-400" : ""}`} />
-            Sync Notion
+            <RefreshCw className={`w-3 h-3 ${isSyncing ? "animate-spin text-indigo-400" : ""}`} />
+            Sync
           </button>
         </div>
       </div>
 
       {/* 3. Main Split Panel workspace */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 relative">
         
-        {/* Left Column: Order Dispatch Guide & Lifecycle (2/5 width) */}
-        <div className="w-[380px] border-r border-slate-900/60 bg-slate-950/10 flex flex-col h-full shrink-0">
+        {/* Left Column: Order Dispatch Queue & Lifecycle (responsive visibility) */}
+        <div className={`w-full md:w-[360px] border-r border-slate-900/60 bg-[#03060d]/10 flex-col h-full shrink-0 ${
+          activeMobileView === "queue" ? "flex" : "hidden md:flex"
+        }`}>
           <div className="p-4 border-b border-slate-900/60 shrink-0">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Fulfillment Queue</span>
           </div>
@@ -298,10 +306,16 @@ export default function PremiumVendorHub() {
               return (
                 <div
                   key={order.id}
-                  onClick={() => setSelectedOrderId(order.id)}
+                  onClick={() => {
+                    setSelectedOrderId(order.id);
+                    // On mobile, automatically shift to details view to guide user
+                    if (window.innerWidth < 768) {
+                      setActiveMobileView("details");
+                    }
+                  }}
                   className={`border p-4.5 rounded-2xl cursor-pointer transition-all duration-300 flex flex-col gap-3 glow-card ${
                     isSelected 
-                      ? "border-indigo-500/40 bg-indigo-950/10 shadow-[0_0_20px_rgba(99,102,241,0.06)]" 
+                      ? "border-indigo-500/40 bg-indigo-950/15 shadow-[0_0_20px_rgba(99,102,241,0.06)]" 
                       : "border-slate-850/80 hover:border-slate-750 bg-[#090d16]/80"
                   }`}
                 >
@@ -345,13 +359,15 @@ export default function PremiumVendorHub() {
         </div>
 
         {/* Center/Right Column: Interactive AI Guidance Workspace */}
-        <div className="flex-1 flex flex-col h-full bg-[#03060d]/20 min-w-0">
+        <div className={`flex-1 flex-col h-full bg-[#03060d]/20 min-w-0 border-r border-slate-900/60 ${
+          activeMobileView === "details" ? "flex" : "hidden md:flex"
+        }`}>
           
           {/* Workspace Tabs */}
-          <div className="h-12 border-b border-slate-900/60 bg-slate-950/20 px-6 flex items-center gap-6 shrink-0 text-xs">
+          <div className="h-12 border-b border-slate-900/60 bg-slate-955/20 px-4 md:px-6 flex items-center gap-4 md:gap-6 shrink-0 text-[10px] md:text-xs overflow-x-auto whitespace-nowrap">
             <button
               onClick={() => setActiveTab("inventory")}
-              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all relative cursor-pointer ${
+              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === "inventory" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-350"
               }`}
             >
@@ -359,7 +375,7 @@ export default function PremiumVendorHub() {
             </button>
             <button
               onClick={() => setActiveTab("forecasting")}
-              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all relative cursor-pointer ${
+              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === "forecasting" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-350"
               }`}
             >
@@ -367,7 +383,7 @@ export default function PremiumVendorHub() {
             </button>
             <button
               onClick={() => setActiveTab("stations")}
-              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all relative cursor-pointer ${
+              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === "stations" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-350"
               }`}
             >
@@ -375,7 +391,7 @@ export default function PremiumVendorHub() {
             </button>
             <button
               onClick={() => setActiveTab("performance")}
-              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all relative cursor-pointer ${
+              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all cursor-pointer ${
                 activeTab === "performance" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-350"
               }`}
             >
@@ -383,82 +399,78 @@ export default function PremiumVendorHub() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
             
             {/* 1. Selected Order Delivery Assignment details */}
             {selectedOrder ? (
-              <div className="glow-card bg-[#0b101d]/60 border border-slate-800/60 rounded-2xl p-5 space-y-4 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-                <div className="flex justify-between items-center border-b border-slate-850 pb-3">
+              <div className="glow-card bg-[#0b101d]/60 border border-slate-800/60 rounded-2xl p-4 md:p-5 space-y-4 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-850 pb-3 gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-[9px] bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded font-extrabold uppercase tracking-widest">
+                    <span className="text-[9px] bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded font-extrabold uppercase tracking-widest shrink-0">
                       Active Escort Guide
                     </span>
-                    <strong className="text-slate-305 text-xs font-mono">PNR {selectedOrder.pnr} ({selectedOrder.trainName})</strong>
+                    <strong className="text-slate-300 text-xs font-mono truncate">PNR {selectedOrder.pnr} ({selectedOrder.trainName})</strong>
                   </div>
-                  <span className="text-[10px] text-slate-450 font-semibold flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 border border-slate-900 rounded">
+                  <span className="text-[10px] text-slate-450 font-semibold flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 border border-slate-900 rounded w-fit shrink-0">
                     <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                    Fulfillment Time: {selectedOrder.estimatedDeliveryTime}
+                    Delivery: {selectedOrder.estimatedDeliveryTime}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* AI Packing */}
-                  <div className="bg-[#03060d]/80 border border-slate-900 p-4 rounded-xl space-y-3 flex flex-col justify-between">
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-550 uppercase tracking-widest block border-b border-slate-900 pb-1.5 mb-2">AI Packing Sequence</span>
-                      {selectedOrder.packingDetails ? (
-                        <div className="space-y-2">
-                          <p className="text-[11px] font-semibold text-indigo-300 leading-relaxed bg-indigo-950/10 p-2 border border-indigo-500/10 rounded font-mono">
-                            💡 {selectedOrder.packingDetails.recommendation}
-                          </p>
-                          <ol className="space-y-1">
-                            {selectedOrder.packingDetails.sequence.slice(0, 3).map((step, sIdx) => (
-                              <li key={sIdx} className="text-[10px] text-slate-400 flex items-center gap-2 font-medium">
-                                <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-[8px] text-indigo-400 font-mono shrink-0">{sIdx+1}</span>
-                                <span>{step}</span>
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-600 font-medium">Advance status to confirm packing sequence logs.</p>
-                      )}
-                    </div>
+                  <div className="bg-[#03060d]/80 border border-slate-900 p-4 rounded-xl space-y-3">
+                    <span className="text-[9px] font-bold text-slate-550 uppercase tracking-widest block border-b border-slate-900 pb-1.5 mb-2">AI Packing Sequence</span>
+                    {selectedOrder.packingDetails ? (
+                      <div className="space-y-2">
+                        <p className="text-[11px] font-semibold text-indigo-300 leading-relaxed bg-indigo-950/10 p-2.5 border border-indigo-500/10 rounded font-mono">
+                          💡 {selectedOrder.packingDetails.recommendation}
+                        </p>
+                        <ol className="space-y-1">
+                          {selectedOrder.packingDetails.sequence.slice(0, 3).map((step, sIdx) => (
+                            <li key={sIdx} className="text-[10px] text-slate-400 flex items-center gap-2 font-medium">
+                              <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-[8px] text-indigo-400 font-mono shrink-0">{sIdx+1}</span>
+                              <span className="truncate">{step}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-600 font-medium">Advance status to confirm packing sequence logs.</p>
+                    )}
                   </div>
 
                   {/* AI Delivery runner assignment */}
-                  <div className="bg-[#03060d]/80 border border-slate-900 p-4 rounded-xl space-y-3 flex flex-col justify-between">
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-550 uppercase tracking-widest block border-b border-slate-900 pb-1.5 mb-2">AI Delivery Route & Runner</span>
-                      <div className="space-y-2">
-                        <select
-                          value={selectedOrder.assignedDeliveryAgent}
-                          onChange={(e) => assignAgentToOrder(selectedOrder.id, e.target.value)}
-                          className="bg-slate-900 border border-slate-800 text-[10px] text-slate-205 rounded px-2 py-1 w-full focus:outline-none"
-                        >
-                          <option value="Unassigned">Assign Delivery Runner</option>
-                          {agents.map((agent) => (
-                            <option key={agent.id} value={agent.name}>
-                              {agent.name} (SLA: {agent.completionRate}%)
-                            </option>
-                          ))}
-                        </select>
+                  <div className="bg-[#03060d]/80 border border-slate-900 p-4 rounded-xl space-y-3">
+                    <span className="text-[9px] font-bold text-slate-555 uppercase tracking-widest block border-b border-slate-900 pb-1.5 mb-2">AI Delivery Route & Runner</span>
+                    <div className="space-y-2">
+                      <select
+                        value={selectedOrder.assignedDeliveryAgent}
+                        onChange={(e) => assignAgentToOrder(selectedOrder.id, e.target.value)}
+                        className="bg-slate-900 border border-slate-800 text-[10px] text-slate-200 rounded px-2.5 py-1.5 w-full focus:outline-none"
+                      >
+                        <option value="Unassigned">Assign Delivery Runner</option>
+                        {agents.map((agent) => (
+                          <option key={agent.id} value={agent.name}>
+                            {agent.name} (SLA: {agent.completionRate}%)
+                          </option>
+                        ))}
+                      </select>
 
-                        {selectedOrder.deliveryRoute ? (
-                          <div className="text-[10px] text-slate-350 font-mono bg-slate-900/60 p-2.5 border border-slate-850 rounded flex gap-2 items-start leading-relaxed">
-                            <Compass className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                            <span>{selectedOrder.deliveryRoute}</span>
-                          </div>
-                        ) : (
-                          <p className="text-[10px] text-slate-600 font-medium">Route recommendations update on confirm.</p>
-                        )}
-                      </div>
+                      {selectedOrder.deliveryRoute ? (
+                        <div className="text-[10px] text-slate-350 font-mono bg-slate-900/60 p-2.5 border border-slate-850 rounded flex gap-2 items-start leading-relaxed">
+                          <Compass className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                          <span>{selectedOrder.deliveryRoute}</span>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-605 font-medium">Route recommendations update on confirm.</p>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-500 font-medium text-center py-6">Select a booking to view dispatcher guide.</p>
+              <p className="text-xs text-slate-550 font-medium text-center py-6 bg-slate-900/30 border border-slate-850 rounded-2xl">Select a booking to view dispatcher guide.</p>
             )}
 
             {/* 2. Dynamic Tab Sections */}
@@ -467,7 +479,7 @@ export default function PremiumVendorHub() {
             {activeTab === "inventory" && (
               <div className="space-y-6">
                 <div className="glow-card bg-[#0b101d]/60 border border-slate-800/60 rounded-2xl p-5 space-y-4 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-                  <div className="flex justify-between items-center border-b border-slate-850 pb-3">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-850 pb-3 gap-2">
                     <div>
                       <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">AI Stock Replenishment Planner</h3>
                       <p className="text-[10px] text-slate-500 mt-0.5">Calculates shortages matching scheduled trains.</p>
@@ -477,9 +489,9 @@ export default function PremiumVendorHub() {
                         onClick={() => {
                           lowStockItems.forEach(i => restockProduct(i.id, i.reorderLevel * 2 - i.availableStock));
                         }}
-                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-slate-100 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-indigo-650/20"
+                        className="px-3.5 py-1.5 bg-indigo-650 hover:bg-indigo-600 text-slate-100 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-lg w-fit"
                       >
-                        Restock all shortages
+                        Restock all
                       </button>
                     )}
                   </div>
@@ -492,28 +504,28 @@ export default function PremiumVendorHub() {
 
                       return (
                         <div key={item.id} className="flex justify-between items-center bg-[#03060d]/80 border border-slate-900 p-3.5 rounded-xl text-xs hover:border-slate-750 transition-all">
-                          <div>
-                            <span className="font-bold text-slate-200 block">{item.name}</span>
-                            <span className="text-[9px] text-slate-500">{item.vendor}</span>
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-200 block truncate">{item.name}</span>
+                            <span className="text-[9px] text-slate-500 truncate block">{item.vendor}</span>
                           </div>
-                          <div className="flex items-center gap-6">
+                          <div className="flex items-center gap-3 sm:gap-6 shrink-0">
                             <div className="text-right">
                               <span className={`font-bold block ${isCritical ? "text-rose-455" : isLow ? "text-amber-400" : "text-slate-300"}`}>
                                 {item.availableStock} Units
                               </span>
-                              <span className="text-[9px] text-slate-550">Reorder limit: {item.reorderLevel}</span>
+                              <span className="text-[9px] text-slate-550">Limit: {item.reorderLevel}</span>
                             </div>
                             
-                            <div className="w-32 text-right">
+                            <div className="w-24 sm:w-32 text-right">
                               {isLow ? (
                                 <button
                                   onClick={() => restockProduct(item.id, needed)}
-                                  className="px-2.5 py-1 bg-indigo-650/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-650 hover:text-slate-100 rounded text-[10px] font-semibold transition-all cursor-pointer"
+                                  className="px-2 py-1 bg-indigo-650/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-650 hover:text-slate-100 rounded text-[9px] font-semibold transition-all cursor-pointer"
                                 >
-                                  AI Suggested: +{needed}
+                                  +{needed}
                                 </button>
                               ) : (
-                                <span className="text-[10px] text-emerald-450 font-bold uppercase tracking-wider">Optimal stock</span>
+                                <span className="text-[10px] text-emerald-450 font-bold uppercase tracking-wider">Optimal</span>
                               )}
                             </div>
                           </div>
@@ -534,8 +546,8 @@ export default function PremiumVendorHub() {
                   
                   {/* Sun Mod */}
                   <div className="space-y-2">
-                    <span className="text-[10px] font-bold text-slate-450 flex items-center gap-1.5 uppercase tracking-wider">
-                      <Sun className="w-3.5 h-3.5 text-amber-500" />
+                    <span className="text-[10px] font-bold text-slate-455 flex items-center gap-1.5 uppercase tracking-wider">
+                      <Sun className="w-3.5 h-3.5 text-amber-505" />
                       Temperature index
                     </span>
                     <input
@@ -544,7 +556,7 @@ export default function PremiumVendorHub() {
                       max="45"
                       value={temperature}
                       onChange={(e) => setTemperature(Number(e.target.value))}
-                      className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                      className="w-full h-1 bg-slate-850 rounded-lg appearance-none cursor-pointer accent-indigo-550"
                     />
                     <span className="text-[10px] text-slate-200 font-bold block text-right font-mono">{temperature}°C</span>
                   </div>
@@ -552,7 +564,7 @@ export default function PremiumVendorHub() {
                   {/* Traffic Mod */}
                   <div className="space-y-2">
                     <span className="text-[10px] font-bold text-slate-455 flex items-center gap-1.5 uppercase tracking-wider">
-                      <Train className="w-3.5 h-3.5 text-indigo-400" />
+                      <Train className="w-3.5 h-3.5 text-indigo-455" />
                       Passenger traffic
                     </span>
                     <input
@@ -562,13 +574,13 @@ export default function PremiumVendorHub() {
                       step="0.1"
                       value={trafficIndex}
                       onChange={(e) => setTrafficIndex(Number(e.target.value))}
-                      className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                      className="w-full h-1 bg-slate-850 rounded-lg appearance-none cursor-pointer accent-indigo-550"
                     />
                     <span className="text-[10px] text-slate-200 font-bold block text-right font-mono">{trafficIndex.toFixed(1)}x</span>
                   </div>
 
                   {/* Weekend toggler */}
-                  <div className="flex justify-between items-center border-l border-slate-850 pl-6">
+                  <div className="flex justify-between items-center border-t border-slate-850/60 pt-4 md:border-t-0 md:pt-0 md:border-l md:pl-6">
                     <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">Weekend modifier</span>
                     <button
                       onClick={() => setIsWeekend(!isWeekend)}
@@ -674,7 +686,7 @@ export default function PremiumVendorHub() {
                         </div>
                         <div className="text-right">
                           <span className="font-bold text-indigo-400 block font-mono">{v.averageFulfillmentTime} mins avg</span>
-                          <span className="text-[10px] text-slate-450 block mt-0.5">⭐ {v.rating.toFixed(1)} / 5.0</span>
+                          <span className="text-[10px] text-slate-455 block mt-0.5">⭐ {v.rating.toFixed(1)} / 5.0</span>
                         </div>
                       </div>
                     ))}
@@ -686,11 +698,112 @@ export default function PremiumVendorHub() {
           </div>
         </div>
 
+        {/* Right Panel: Inventory list & AI Chat Co-Pilot (responsive visibility) */}
+        <div className={`w-full md:w-[360px] bg-slate-950/60 flex-col h-full shrink-0 ${
+          activeMobileView === "stocks" ? "flex" : "hidden md:flex"
+        }`}>
+          
+          {/* Top Half: Inventory Stock Levels */}
+          <div className="flex-1 border-b border-slate-900 p-4 flex flex-col overflow-hidden">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Live Stock Levels</span>
+            
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {filteredInventory.map((item) => {
+                const isLow = item.availableStock <= item.reorderLevel;
+                const isCritical = item.availableStock <= item.reorderLevel / 2;
+
+                return (
+                  <div key={item.id} className="bg-slate-900/40 border border-slate-850/60 p-3 rounded-xl flex items-center justify-between text-xs glow-card hover:border-slate-700 transition-all">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-slate-200">{item.name}</span>
+                        {isLow && (
+                          <span className={`w-1.5 h-1.5 rounded-full ${isCritical ? "bg-rose-500 animate-ping" : "bg-amber-500 animate-pulse"}`}></span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-500">{item.vendor}</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <span className={`font-bold block ${isCritical ? "text-rose-455" : isLow ? "text-amber-400" : "text-slate-100"}`}>
+                          {item.availableStock} units
+                        </span>
+                        <span className="text-[9px] text-slate-550">Limit: {item.reorderLevel}</span>
+                      </div>
+                      <button
+                        onClick={() => restockProduct(item.id, 20)}
+                        className="px-2 py-1 bg-slate-950 hover:bg-slate-900 text-[9px] font-bold border border-slate-800 text-slate-350 hover:text-slate-200 rounded transition-all cursor-pointer"
+                      >
+                        +20
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Bottom Half: Mini AI Assistant Panel */}
+          <div className="h-[260px] p-4 flex flex-col overflow-hidden bg-slate-900/10 border-t border-slate-900/60">
+            <div className="flex items-center gap-1.5 border-b border-slate-900 pb-3 shrink-0 mb-3">
+              <Bot className="w-4 h-4 text-indigo-400 animate-pulse" />
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">AI Guidance Bot</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-auto animate-ping"></span>
+            </div>
+
+            {/* Quick Prompts */}
+            <div className="flex-1 overflow-y-auto flex flex-col justify-end space-y-3">
+              <div className="bg-slate-900 border border-slate-850 p-3 rounded-xl rounded-bl-none text-xs text-slate-300">
+                <p className="font-semibold text-indigo-405 flex items-center gap-1 mb-1">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  Nexus Co-Pilot Insights
+                </p>
+                <p className="text-[11px] text-slate-450 leading-relaxed font-medium">Use the floating **AI Copilot** button at the bottom-right for full conversational audits.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* Mobile Sticky Bottom Tab Bar */}
+      <div className="h-16 border-t border-slate-900 bg-[#070a13]/90 backdrop-blur-md flex items-center justify-around md:hidden shrink-0 z-30 px-4">
+        <button
+          onClick={() => setActiveMobileView("queue")}
+          className={`flex flex-col items-center gap-1.5 transition-colors cursor-pointer ${
+            activeMobileView === "queue" ? "text-indigo-400 font-bold" : "text-slate-500 hover:text-slate-400"
+          }`}
+        >
+          <ShoppingCart className="w-5 h-5" />
+          <span className="text-[9px] uppercase tracking-wider font-bold">Queue</span>
+        </button>
+        
+        <button
+          onClick={() => setActiveMobileView("details")}
+          className={`flex flex-col items-center gap-1.5 transition-colors cursor-pointer ${
+            activeMobileView === "details" ? "text-indigo-400 font-bold" : "text-slate-500 hover:text-slate-400"
+          }`}
+        >
+          <Compass className="w-5 h-5" />
+          <span className="text-[9px] uppercase tracking-wider font-bold">Details</span>
+        </button>
+        
+        <button
+          onClick={() => setActiveMobileView("stocks")}
+          className={`flex flex-col items-center gap-1.5 transition-colors cursor-pointer ${
+            activeMobileView === "stocks" ? "text-indigo-400 font-bold" : "text-slate-500 hover:text-slate-400"
+          }`}
+        >
+          <Package className="w-5 h-5" />
+          <span className="text-[9px] uppercase tracking-wider font-bold">Stocks</span>
+        </button>
       </div>
 
       {/* Simulator Modal */}
       {showSimModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center px-4">
           <div className="bg-[#0b101d] border border-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl relative glow-card">
             <h2 className="text-xs font-bold text-slate-100 flex items-center gap-2 mb-1 uppercase tracking-wider">
               <Cpu className="w-4 h-4 text-indigo-400" />
@@ -791,7 +904,7 @@ export default function PremiumVendorHub() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-slate-100 text-xs font-bold rounded-lg shadow-lg transition-all cursor-pointer"
+                  className="px-4 py-2 bg-indigo-650 hover:bg-indigo-500 text-slate-100 text-xs font-bold rounded-lg shadow-lg transition-all cursor-pointer"
                 >
                   Deploy Order
                 </button>

@@ -8,7 +8,8 @@ import {
   Bell, 
   AlertTriangle,
   CheckCircle2,
-  Database
+  Database,
+  Menu
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 
@@ -19,7 +20,8 @@ export const Header: React.FC = () => {
     setActiveStationFilter, 
     triggerNotionSync,
     inventory,
-    orders
+    orders,
+    setMobileMenuOpen
   } = useNexus();
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -28,15 +30,7 @@ export const Header: React.FC = () => {
   // Get active page title
   const getPageTitle = () => {
     switch (pathname) {
-      case "/": return "Command Center Dashboard";
-      case "/orders": return "Order Operations Hub";
-      case "/inventory": return "Inventory Management System";
-      case "/delivery": return "Delivery Operations Panel";
-      case "/vendors": return "Vendor Performance Network";
-      case "/stations": return "Station Commerce Hubs";
-      case "/forecasting": return "AI Predictive Forecasting";
-      case "/reports": return "Operational Report Center";
-      case "/notion-sync": return "Notion Backend Integration";
+      case "/": return "Vendor Guidance Hub";
       case "/settings": return "System Settings";
       default: return "Nexus OS";
     }
@@ -59,15 +53,23 @@ export const Header: React.FC = () => {
   const totalAlerts = lowStockCount + pendingOrdersCount;
 
   return (
-    <header className="h-16 border-b border-slate-800 bg-slate-950/40 backdrop-blur-md px-8 flex items-center justify-between shrink-0 z-20">
-      <div>
-        <h2 className="text-lg font-bold text-slate-100">{getPageTitle()}</h2>
-        <p className="text-xs text-slate-500 font-medium">Real-time terminal logistics and food supply chain</p>
+    <header className="h-16 border-b border-slate-900/60 bg-slate-950/40 backdrop-blur-md px-4 md:px-8 flex items-center justify-between shrink-0 z-20">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="p-1.5 hover:bg-slate-905 rounded-lg md:hidden text-slate-400 hover:text-slate-200 transition-colors shrink-0"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div>
+          <h2 className="text-sm md:text-md font-bold text-slate-100">{getPageTitle()}</h2>
+          <p className="text-[10px] text-slate-500 font-medium hidden sm:block">Real-time terminal logistics and food supply chain</p>
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         {/* Station Select Toggle */}
-        <div className="flex items-center bg-slate-900/90 border border-slate-800 rounded-lg p-0.5 text-xs text-slate-400">
+        <div className="flex items-center bg-slate-900/90 border border-slate-800 rounded-lg p-0.5 text-[10px] md:text-xs text-slate-400 overflow-x-auto max-w-[150px] sm:max-w-none whitespace-nowrap">
           <button
             onClick={() => setActiveStationFilter("All")}
             className={`px-3 py-1.5 rounded-md font-medium transition-all ${

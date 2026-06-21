@@ -97,6 +97,8 @@ interface NexusContextType {
   saveNotionConfig: (config: Partial<NotionConfig>) => void;
   addOrder: (order: Omit<Order, "id" | "createdAt" | "packingDetails" | "estimatedDeliveryTime" | "deliveryRoute">) => void;
   getAiCopilotResponse: (query: string) => Promise<string>;
+  mobileMenuOpen: boolean;
+  setMobileMenuOpen: (open: boolean) => void;
 }
 
 // Initial Mock Data
@@ -249,6 +251,8 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     agentsDbId: "",
     isConfigured: false,
   });
+  
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Load initial data
   useEffect(() => {
@@ -592,6 +596,8 @@ export const NexusProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         saveNotionConfig,
         addOrder,
         getAiCopilotResponse,
+        mobileMenuOpen,
+        setMobileMenuOpen,
       }}
     >
       {children}
