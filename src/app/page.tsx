@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNexus, Order, InventoryItem } from "@/context/NexusContext";
 import { 
   ShoppingCart, 
@@ -27,7 +27,11 @@ import {
   Flame,
   ArrowRight,
   TrendingUp,
-  Cpu
+  Cpu,
+  ChevronLeft,
+  Settings,
+  Terminal,
+  UserCheck
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -57,29 +61,56 @@ const STATUS_COLORS: Record<Order["status"], string> = {
   Cancelled: "bg-rose-500/10 text-rose-400 border border-rose-500/20",
 };
 
-export default function PremiumVendorHub() {
+interface ChatMessage {
+  sender: "user" | "copilot";
+  text: string;
+  timestamp: Date;
+}
+
+export default function MobileVendorApp() {
   const { 
     orders, 
     inventory, 
     vendors,
     agents, 
+    syncLogs, 
     activeStationFilter, 
+    setActiveStationFilter,
     updateOrderStatus, 
     assignAgentToOrder,
     restockProduct,
     addOrder,
-    triggerNotionSync
+    triggerNotionSync,
+    getAiCopilotResponse,
+    notionConfig,
+    saveNotionConfig
   } = useNexus();
 
+  // Mobile App Navigation
+  const [activeTab, setActiveTab] = useState<"orders" | "stocks" | "ai" | "config">("orders");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showSimModal, setShowSimModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<"inventory" | "forecasting" | "stations" | "performance">("inventory");
-  
-  // Mobile Tab View Controller
-  const [activeMobileView, setActiveMobileView] = useState<"queue" | "details" | "stocks">("queue");
+
+  // AI Chat States
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      sender: "copilot",
+      text: "### Nexus Active.\nAsk me about stock replenishments, runner SLAs, or peak train volumes.",
+      timestamp: new Date()
+    }
+  ]);
+  const [isTyping, setIsTyping] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Settings states
+  const [notionToken, setNotionToken] = useState(notionConfig.integrationToken);
+  const [ordersDbId, setOrdersDbId] = useState(notionConfig.ordersDbId);
+  const [inventoryDbId, setInventoryDbId] = useState(notionConfig.inventoryDbId);
+  const [isSettingsSaved, setIsSettingsSaved] = useState(false);
 
   // Forecasting sliders
   const [temperature, setTemperature] = useState(38);
@@ -95,10 +126,24 @@ export default function PremiumVendorHub() {
   const [simProduct, setSimProduct] = useState("Water Bottle");
   const [simQty, setSimQty] = useState(1);
 
-  // Mount check to safeguard Recharts
+  // Mount check
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Auto scroll chat
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, isTyping]);
+
+  // Sync settings when loaded
+  useEffect(() => {
+    setNotionToken(notionConfig.integrationToken);
+    setOrdersDbId(notionConfig.ordersDbId);
+    setInventoryDbId(notionConfig.inventoryDbId);
+  }, [notionConfig]);
 
   // Filter Bookings
   const filteredOrders = orders.filter((o) => {
@@ -115,15 +160,7 @@ export default function PremiumVendorHub() {
   );
 
   const lowStockItems = filteredInventory.filter(i => i.availableStock <= i.reorderLevel);
-
-  // Auto-select booking
-  useEffect(() => {
-    if (filteredOrders.length > 0 && !selectedOrderId) {
-      setSelectedOrderId(filteredOrders[0].id);
-    }
-  }, [filteredOrders, selectedOrderId]);
-
-  const selectedOrder = orders.find(o => o.id === selectedOrderId) || filteredOrders[0];
+  const selectedOrder = orders.find(o => o.id === selectedOrderId);
 
   const handleNextStatus = (order: Order) => {
     const statuses: Order["status"][] = ["Pending", "Confirmed", "Packing", "Out For Delivery", "Delivered"];
@@ -157,14 +194,40 @@ export default function PremiumVendorHub() {
     setSimSeat("");
     setShowSimModal(false);
     
-    // Auto switch to list on mobile to see it
-    setActiveMobileView("queue");
+    // Select the new order
+    const lastOrder = orders[0];
+    if (lastOrder) setSelectedOrderId(lastOrder.id);
   };
 
   const handleManualSync = async () => {
     setIsSyncing(true);
     await triggerNotionSync();
     setIsSyncing(false);
+  };
+
+  const handleChatSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userMsg = chatInput;
+    setChatMessages(prev => [...prev, { sender: "user", text: userMsg, timestamp: new Date() }]);
+    setChatInput("");
+    setIsTyping(true);
+
+    const response = await getAiCopilotResponse(userMsg);
+    setChatMessages(prev => [...prev, { sender: "copilot", text: response, timestamp: new Date() }]);
+    setIsTyping(false);
+  };
+
+  const handleSettingsSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveNotionConfig({
+      integrationToken: notionToken,
+      ordersDbId: ordersDbId,
+      inventoryDbId: inventoryDbId
+    });
+    setIsSettingsSaved(true);
+    setTimeout(() => setIsSettingsSaved(false), 3000);
   };
 
   const calculateForecastMultiplier = () => {
@@ -186,727 +249,605 @@ export default function PremiumVendorHub() {
     { day: "Sun", Projected: Math.floor(44000 * (mult + 0.2)) },
   ];
 
+  const renderMessageContent = (text: string) => {
+    const lines = text.split("\n");
+    return lines.map((line, idx) => {
+      let trimmed = line.trim();
+      if (trimmed.startsWith("### ")) {
+        return <h4 key={idx} className="text-[11px] font-bold text-slate-100 mt-2 mb-1 flex items-center gap-1"><Sparkles className="w-3 h-3 text-indigo-400" /> {trimmed.substring(4)}</h4>;
+      }
+      if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+        return <div key={idx} className="text-[10px] text-slate-350 pl-3 border-l border-slate-700/80 my-1">{trimmed.substring(2).replace(/\*\*/g, "")}</div>;
+      }
+      return <p key={idx} className="text-[10px] text-slate-300 leading-normal mb-1">{line.replace(/\*\*/g, "")}</p>;
+    });
+  };
+
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-gradient-to-b from-[#090e1a] to-[#02050c] text-slate-100 font-sans antialiased">
+    <div className="h-full flex flex-col bg-gradient-to-b from-[#090e1a] to-[#02050c] overflow-hidden select-none relative">
       
-      {/* 1. Global Metrics guidance row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 p-4 md:p-6 border-b border-slate-900/60 bg-slate-955/20 shrink-0">
-        
-        {/* Metric 1: Vendor SLA Performance */}
-        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-3 md:p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-2.5 md:gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-indigo-500/20 transition-all duration-300">
-          <div className="p-2 bg-indigo-650/10 text-indigo-400 border border-indigo-500/20 rounded-lg shrink-0">
-            <Star className="w-4 h-4 md:w-5 md:h-5 text-indigo-400" />
+      {/* Dynamic Header */}
+      <header className="h-14 border-b border-slate-900/60 bg-[#040812]/80 backdrop-blur-md px-4 flex items-center justify-between shrink-0 z-30">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-indigo-650/15 text-indigo-400 border border-indigo-500/20 rounded-lg">
+            <Cpu className="w-4.5 h-4.5 animate-pulse" />
           </div>
-          <div className="min-w-0">
-            <span className="text-[8px] md:text-[10px] font-bold text-slate-550 uppercase tracking-wider block truncate">Kitchen SLA</span>
-            <span className="text-xs md:text-md font-extrabold text-slate-200 block mt-0.5 tracking-tight truncate">4.8 ⭐</span>
+          <div>
+            <h1 className="font-extrabold text-xs tracking-wider uppercase text-slate-200">RailQuick</h1>
+            <span className="text-[9px] font-bold text-indigo-400 block">NEXUS APP</span>
           </div>
         </div>
 
-        {/* Metric 2: Orders state */}
-        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-3 md:p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-2.5 md:gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-emerald-500/20 transition-all duration-300">
-          <div className="p-2 bg-emerald-650/10 text-emerald-400 border border-emerald-500/20 rounded-lg shrink-0">
-            <ShoppingCart className="w-4 h-4 md:w-5 md:h-5 text-emerald-400" />
-          </div>
-          <div className="min-w-0">
-            <span className="text-[8px] md:text-[10px] font-bold text-slate-550 uppercase tracking-wider block truncate">Fulfillments</span>
-            <span className="text-xs md:text-md font-extrabold text-slate-200 block mt-0.5 tracking-tight truncate">
-              {orders.filter(o => o.status !== "Delivered" && o.status !== "Cancelled").length} active
-            </span>
-          </div>
-        </div>
+        {/* Station Select Toggle inside app header */}
+        <select
+          value={activeStationFilter}
+          onChange={(e) => setActiveStationFilter(e.target.value)}
+          className="bg-slate-900 border border-slate-850 text-[10px] font-bold text-slate-300 rounded-md px-2 py-1 focus:outline-none"
+        >
+          <option value="All">All Terminals</option>
+          <option value="New Delhi Railway Station">NDLS Station</option>
+          <option value="Anand Vihar Railway Station">ANVT Station</option>
+        </select>
+      </header>
 
-        {/* Metric 3: Safety stock warnings */}
-        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-3 md:p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-2.5 md:gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-amber-500/20 transition-all duration-300">
-          <div className="p-2 bg-amber-650/10 text-amber-400 border border-amber-500/20 rounded-lg shrink-0">
-            <AlertTriangle className="w-4 h-4 md:w-5 md:h-5 text-amber-400" />
-          </div>
-          <div className="min-w-0">
-            <span className="text-[8px] md:text-[10px] font-bold text-slate-555 uppercase tracking-wider block truncate">Safety Alert</span>
-            <span className={`text-xs md:text-md font-extrabold block mt-0.5 tracking-tight truncate ${lowStockItems.length > 0 ? "text-amber-400 animate-pulse" : "text-slate-200"}`}>
-              {lowStockItems.length} items
-            </span>
-          </div>
-        </div>
+      {/* Main Screen Router Content */}
+      <div className="flex-1 overflow-hidden min-h-0 relative">
 
-        {/* Metric 4: Platform hotspots */}
-        <div className="bg-[#0b101d]/60 backdrop-blur-xl p-3 md:p-4.5 border border-slate-800/60 rounded-2xl flex items-center gap-2.5 md:gap-4 shadow-[0_4px_25px_rgba(0,0,0,0.4)] hover:border-violet-500/20 transition-all duration-300">
-          <div className="p-2 bg-violet-650/10 text-violet-400 border border-violet-500/20 rounded-lg shrink-0">
-            <Activity className="w-4 h-4 md:w-5 md:h-5 text-violet-400 animate-pulse" />
-          </div>
-          <div className="min-w-0">
-            <span className="text-[8px] md:text-[10px] font-bold text-slate-555 uppercase tracking-wider block truncate">Hotspots</span>
-            <span className="text-xs md:text-md font-extrabold text-slate-200 block mt-0.5 tracking-tight truncate">Pl 3 & 5</span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* 2. Control room actions */}
-      <div className="h-14 border-b border-slate-900/60 bg-slate-950/10 px-4 md:px-6 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0"></span>
-          <span className="text-[10px] md:text-xs font-bold text-slate-450 uppercase tracking-wider truncate">
-            {activeStationFilter === "All" ? "All Terminals" : activeStationFilter.replace(" Railway Station", "")}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 md:gap-3 shrink-0">
-          <div className="relative hidden sm:block">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2" />
-            <input
-              type="text"
-              placeholder="Search PNR..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-[#0b101d]/85 border border-slate-800/60 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-250 placeholder-slate-550 focus:outline-none focus:border-indigo-500/60 transition-all min-w-[120px]"
-            />
-          </div>
-
-          <button
-            onClick={() => {
-              setSimPnr(Math.floor(1000000000 + Math.random() * 9000000000).toString());
-              setSimTrainNum(Math.floor(12000 + Math.random() * 1000).toString());
-              setSimTrainName("NDLS Shatabdi Exp");
-              setSimCoach("C2");
-              setSimSeat(Math.floor(1 + Math.random() * 60).toString());
-              setShowSimModal(true);
-            }}
-            className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-slate-100 rounded-lg text-[10px] md:text-xs font-bold shadow border border-indigo-400/20 transition-all hover:scale-102 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Order
-          </button>
-
-          <button
-            onClick={handleManualSync}
-            disabled={isSyncing}
-            className="flex items-center gap-1 px-3 py-1.5 bg-[#0b101d] border border-slate-850 hover:border-slate-700 text-slate-350 hover:text-slate-200 text-[10px] md:text-xs font-semibold rounded-lg transition-all cursor-pointer"
-          >
-            <RefreshCw className={`w-3 h-3 ${isSyncing ? "animate-spin text-indigo-400" : ""}`} />
-            Sync
-          </button>
-        </div>
-      </div>
-
-      {/* 3. Main Split Panel workspace */}
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0 relative">
-        
-        {/* Left Column: Order Dispatch Queue & Lifecycle (responsive visibility) */}
-        <div className={`w-full md:w-[360px] border-r border-slate-900/60 bg-[#03060d]/10 flex-col h-full shrink-0 ${
-          activeMobileView === "queue" ? "flex" : "hidden md:flex"
-        }`}>
-          <div className="p-4 border-b border-slate-900/60 shrink-0">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Fulfillment Queue</span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {filteredOrders.map((order) => {
-              const isSelected = order.id === selectedOrderId;
-              return (
-                <div
-                  key={order.id}
-                  onClick={() => {
-                    setSelectedOrderId(order.id);
-                    // On mobile, automatically shift to details view to guide user
-                    if (window.innerWidth < 768) {
-                      setActiveMobileView("details");
-                    }
-                  }}
-                  className={`border p-4.5 rounded-2xl cursor-pointer transition-all duration-300 flex flex-col gap-3 glow-card ${
-                    isSelected 
-                      ? "border-indigo-500/40 bg-indigo-950/15 shadow-[0_0_20px_rgba(99,102,241,0.06)]" 
-                      : "border-slate-850/80 hover:border-slate-750 bg-[#090d16]/80"
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-indigo-400 font-mono tracking-wider bg-indigo-650/10 px-2 py-0.5 rounded border border-indigo-500/10">PNR: {order.pnr}</span>
-                    <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${STATUS_COLORS[order.status]}`}>
-                      {order.status}
-                    </span>
+        {/* SCREEN 1: Orders (Nested Stack: List vs Details) */}
+        {activeTab === "orders" && (
+          <div className="h-full flex flex-col overflow-hidden">
+            {!selectedOrderId ? (
+              /* ORDER LIST SCREEN */
+              <div className="h-full flex flex-col overflow-hidden">
+                <div className="p-3 border-b border-slate-900 flex justify-between items-center bg-[#040812]/20 shrink-0 gap-3">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2" />
+                    <input
+                      type="text"
+                      placeholder="Search PNR..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-850 rounded-lg pl-8 pr-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
+                    />
                   </div>
-
-                  <div>
-                    <span className="text-xs font-bold text-slate-200 block truncate">{order.trainName}</span>
-                    <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mt-1">
-                      <Train className="w-3 h-3 text-slate-600" />
-                      Train #{order.trainNumber} • Coach {order.coach} (Seat {order.seat})
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-850/60 mt-1 text-[10px]">
-                    <span className="text-slate-550 font-bold">
-                      📍 {order.station.replace(" Railway Station", "")}
-                    </span>
-                    {order.status !== "Delivered" && order.status !== "Cancelled" && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleNextStatus(order);
-                        }}
-                        className="px-2.5 py-1 bg-indigo-600/15 text-indigo-400 border border-indigo-500/25 rounded text-[8px] font-bold uppercase tracking-wider hover:bg-indigo-600 hover:text-slate-100 transition-all cursor-pointer"
-                      >
-                        {order.status === "Pending" ? "Confirm" :
-                         order.status === "Confirmed" ? "Pack" :
-                         order.status === "Packing" ? "Dispatch" : "Deliver"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Center/Right Column: Interactive AI Guidance Workspace */}
-        <div className={`flex-1 flex-col h-full bg-[#03060d]/20 min-w-0 border-r border-slate-900/60 ${
-          activeMobileView === "details" ? "flex" : "hidden md:flex"
-        }`}>
-          
-          {/* Workspace Tabs */}
-          <div className="h-12 border-b border-slate-900/60 bg-slate-955/20 px-4 md:px-6 flex items-center gap-4 md:gap-6 shrink-0 text-[10px] md:text-xs overflow-x-auto whitespace-nowrap">
-            <button
-              onClick={() => setActiveTab("inventory")}
-              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                activeTab === "inventory" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-350"
-              }`}
-            >
-              Inventory Planner
-            </button>
-            <button
-              onClick={() => setActiveTab("forecasting")}
-              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                activeTab === "forecasting" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-350"
-              }`}
-            >
-              Demand Forecasting
-            </button>
-            <button
-              onClick={() => setActiveTab("stations")}
-              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                activeTab === "stations" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-350"
-              }`}
-            >
-              Station Visibility
-            </button>
-            <button
-              onClick={() => setActiveTab("performance")}
-              className={`pb-4 pt-3.5 border-b-2 font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                activeTab === "performance" ? "border-indigo-500 text-indigo-400" : "border-transparent text-slate-500 hover:text-slate-350"
-              }`}
-            >
-              Vendor performance
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-            
-            {/* 1. Selected Order Delivery Assignment details */}
-            {selectedOrder ? (
-              <div className="glow-card bg-[#0b101d]/60 border border-slate-800/60 rounded-2xl p-4 md:p-5 space-y-4 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-850 pb-3 gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] bg-indigo-500/15 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded font-extrabold uppercase tracking-widest shrink-0">
-                      Active Escort Guide
-                    </span>
-                    <strong className="text-slate-300 text-xs font-mono truncate">PNR {selectedOrder.pnr} ({selectedOrder.trainName})</strong>
-                  </div>
-                  <span className="text-[10px] text-slate-450 font-semibold flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 border border-slate-900 rounded w-fit shrink-0">
-                    <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                    Delivery: {selectedOrder.estimatedDeliveryTime}
-                  </span>
+                  <button
+                    onClick={() => {
+                      setSimPnr(Math.floor(1000000000 + Math.random() * 9000000000).toString());
+                      setSimTrainNum(Math.floor(12000 + Math.random() * 1000).toString());
+                      setSimTrainName("NDLS Shatabdi Exp");
+                      setSimCoach("C2");
+                      setSimSeat(Math.floor(1 + Math.random() * 60).toString());
+                      setShowSimModal(true);
+                    }}
+                    className="p-1.5 bg-indigo-650 hover:bg-indigo-600 text-slate-100 rounded-lg shadow-md border border-indigo-400/20 shrink-0 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* AI Packing */}
-                  <div className="bg-[#03060d]/80 border border-slate-900 p-4 rounded-xl space-y-3">
-                    <span className="text-[9px] font-bold text-slate-550 uppercase tracking-widest block border-b border-slate-900 pb-1.5 mb-2">AI Packing Sequence</span>
-                    {selectedOrder.packingDetails ? (
-                      <div className="space-y-2">
-                        <p className="text-[11px] font-semibold text-indigo-300 leading-relaxed bg-indigo-950/10 p-2.5 border border-indigo-500/10 rounded font-mono">
-                          💡 {selectedOrder.packingDetails.recommendation}
-                        </p>
-                        <ol className="space-y-1">
-                          {selectedOrder.packingDetails.sequence.slice(0, 3).map((step, sIdx) => (
-                            <li key={sIdx} className="text-[10px] text-slate-400 flex items-center gap-2 font-medium">
-                              <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-[8px] text-indigo-400 font-mono shrink-0">{sIdx+1}</span>
-                              <span className="truncate">{step}</span>
-                            </li>
-                          ))}
-                        </ol>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {filteredOrders.map((order) => (
+                    <div
+                      key={order.id}
+                      onClick={() => setSelectedOrderId(order.id)}
+                      className="border border-slate-850 bg-[#090d16]/80 p-4 rounded-2xl cursor-pointer hover:border-indigo-500/20 transition-all duration-300 flex flex-col gap-2.5 glow-card"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-indigo-400 font-mono tracking-wider bg-indigo-650/10 px-2 py-0.5 rounded border border-indigo-500/10">PNR: {order.pnr}</span>
+                        <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${STATUS_COLORS[order.status]}`}>
+                          {order.status}
+                        </span>
                       </div>
-                    ) : (
-                      <p className="text-[10px] text-slate-600 font-medium">Advance status to confirm packing sequence logs.</p>
-                    )}
-                  </div>
-
-                  {/* AI Delivery runner assignment */}
-                  <div className="bg-[#03060d]/80 border border-slate-900 p-4 rounded-xl space-y-3">
-                    <span className="text-[9px] font-bold text-slate-555 uppercase tracking-widest block border-b border-slate-900 pb-1.5 mb-2">AI Delivery Route & Runner</span>
-                    <div className="space-y-2">
-                      <select
-                        value={selectedOrder.assignedDeliveryAgent}
-                        onChange={(e) => assignAgentToOrder(selectedOrder.id, e.target.value)}
-                        className="bg-slate-900 border border-slate-800 text-[10px] text-slate-200 rounded px-2.5 py-1.5 w-full focus:outline-none"
-                      >
-                        <option value="Unassigned">Assign Delivery Runner</option>
-                        {agents.map((agent) => (
-                          <option key={agent.id} value={agent.name}>
-                            {agent.name} (SLA: {agent.completionRate}%)
-                          </option>
-                        ))}
-                      </select>
-
-                      {selectedOrder.deliveryRoute ? (
-                        <div className="text-[10px] text-slate-350 font-mono bg-slate-900/60 p-2.5 border border-slate-850 rounded flex gap-2 items-start leading-relaxed">
-                          <Compass className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                          <span>{selectedOrder.deliveryRoute}</span>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-605 font-medium">Route recommendations update on confirm.</p>
-                      )}
+                      <div>
+                        <span className="text-xs font-bold text-slate-200 block truncate">{order.trainName}</span>
+                        <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mt-1 font-mono">
+                          Coach {order.coach} / Seat {order.seat}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2.5 border-t border-slate-850/60 text-[9px] text-slate-550 font-bold">
+                        <span>📍 {order.station.replace(" Railway Station", "")}</span>
+                        <span className="text-slate-400 font-mono">{order.estimatedDeliveryTime}</span>
+                      </div>
                     </div>
-                  </div>
+                  ))}
+
+                  {filteredOrders.length === 0 && (
+                    <p className="text-xs text-slate-650 text-center py-12">No pending bookings.</p>
+                  )}
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-slate-550 font-medium text-center py-6 bg-slate-900/30 border border-slate-850 rounded-2xl">Select a booking to view dispatcher guide.</p>
-            )}
+              /* ORDER DETAILS SCREEN (With Back button) */
+              selectedOrder && (
+                <div className="h-full flex flex-col overflow-hidden bg-[#03060d]/10">
+                  <div className="h-11 border-b border-slate-900 bg-[#040812]/40 px-3 flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => setSelectedOrderId(null)}
+                      className="p-1 hover:bg-slate-900 rounded-lg text-slate-400 hover:text-slate-250 transition-colors"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                    <span className="text-xs font-bold text-slate-350">Order Detail stack</span>
+                  </div>
 
-            {/* 2. Dynamic Tab Sections */}
-            
-            {/* Tab: Inventory Planner */}
-            {activeTab === "inventory" && (
-              <div className="space-y-6">
-                <div className="glow-card bg-[#0b101d]/60 border border-slate-800/60 rounded-2xl p-5 space-y-4 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-850 pb-3 gap-2">
-                    <div>
-                      <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">AI Stock Replenishment Planner</h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Calculates shortages matching scheduled trains.</p>
+                  <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                    
+                    {/* Header PNR */}
+                    <div className="bg-[#0b101d]/60 border border-slate-850 p-4 rounded-2xl space-y-2 glow-card shadow">
+                      <div className="flex justify-between items-center">
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-widest ${STATUS_COLORS[selectedOrder.status]}`}>
+                          {selectedOrder.status}
+                        </span>
+                        <strong className="text-[10px] text-slate-500 font-mono">PNR: {selectedOrder.pnr}</strong>
+                      </div>
+                      <h3 className="text-xs font-extrabold text-slate-200 mt-1">{selectedOrder.trainName} • #{selectedOrder.trainNumber}</h3>
+                      <div className="flex justify-between text-[10px] text-slate-450 border-t border-slate-850/60 pt-2 mt-2">
+                        <span>Coach {selectedOrder.coach} / Seat {selectedOrder.seat}</span>
+                        <span>Time: {selectedOrder.estimatedDeliveryTime}</span>
+                      </div>
                     </div>
-                    {lowStockItems.length > 0 && (
+
+                    {/* Products details */}
+                    <div className="bg-[#03060d]/60 border border-slate-900 p-4 rounded-xl space-y-2.5">
+                      <span className="text-[9px] font-bold text-slate-550 uppercase tracking-widest block border-b border-slate-900 pb-1.5">Items list</span>
+                      {selectedOrder.products.map((p, idx) => (
+                        <div key={idx} className="flex justify-between text-xs font-bold text-slate-300">
+                          <span>{p.name}</span>
+                          <span className="text-indigo-400 font-mono">Qty {p.quantity}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* AI Packing Sequence details */}
+                    <div className="bg-indigo-650/5 border border-indigo-500/20 p-4 rounded-xl space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <Box className="w-4.5 h-4.5 text-indigo-400" />
+                        <span className="text-xs font-bold text-slate-250 uppercase tracking-wider">AI Packing Assistant</span>
+                      </div>
+                      {selectedOrder.packingDetails ? (
+                        <div className="space-y-3">
+                          <p className="text-[11px] font-semibold text-indigo-300 leading-normal bg-indigo-950/20 p-2.5 border border-indigo-500/10 rounded font-mono">
+                            💡 {selectedOrder.packingDetails.recommendation}
+                          </p>
+                          <ol className="space-y-1">
+                            {selectedOrder.packingDetails.sequence.map((step, sIdx) => (
+                              <li key={sIdx} className="text-[10px] text-slate-400 flex items-center gap-1.5 font-medium">
+                                <span className="w-3.5 h-3.5 rounded-full bg-slate-900 border border-slate-850 flex items-center justify-center text-[8px] text-indigo-400 font-mono shrink-0">{sIdx+1}</span>
+                                <span>{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-550">Fulfillment sequences generate automatically on confirm.</p>
+                      )}
+                    </div>
+
+                    {/* AI Delivery routing & partner */}
+                    <div className="bg-emerald-650/5 border border-emerald-500/20 p-4 rounded-xl space-y-3">
+                      <div className="flex items-center gap-1.5">
+                        <Compass className="w-4.5 h-4.5 text-emerald-400 animate-pulse" />
+                        <span className="text-xs font-bold text-slate-250 uppercase tracking-wider">AI Platform Routing</span>
+                      </div>
+                      <div className="space-y-3.5">
+                        <select
+                          value={selectedOrder.assignedDeliveryAgent}
+                          onChange={(e) => assignAgentToOrder(selectedOrder.id, e.target.value)}
+                          className="bg-slate-900 border border-slate-800 text-[10px] text-slate-200 rounded px-2.5 py-1.5 w-full focus:outline-none"
+                        >
+                          <option value="Unassigned">Assign Delivery Runner</option>
+                          {agents.map((agent) => (
+                            <option key={agent.id} value={agent.name}>
+                              {agent.name} (SLA: {agent.completionRate}%)
+                            </option>
+                          ))}
+                        </select>
+
+                        {selectedOrder.deliveryRoute ? (
+                          <div className="text-[10px] text-slate-350 font-mono bg-slate-950/80 p-2.5 border border-slate-900 rounded flex gap-2 items-start leading-relaxed">
+                            <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                            <span>{selectedOrder.deliveryRoute}</span>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-slate-605">Route suggestions update when status changes.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Next Action button */}
+                    {selectedOrder.status !== "Delivered" && selectedOrder.status !== "Cancelled" && (
                       <button
-                        onClick={() => {
-                          lowStockItems.forEach(i => restockProduct(i.id, i.reorderLevel * 2 - i.availableStock));
-                        }}
-                        className="px-3.5 py-1.5 bg-indigo-650 hover:bg-indigo-600 text-slate-100 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shadow-lg w-fit"
+                        onClick={() => handleNextStatus(selectedOrder)}
+                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-slate-100 rounded-xl text-xs font-bold uppercase tracking-wider shadow border border-indigo-400/20 transition-all cursor-pointer"
                       >
-                        Restock all
+                        Advance Order Status
                       </button>
                     )}
-                  </div>
 
-                  <div className="space-y-3">
-                    {filteredInventory.map((item) => {
-                      const isLow = item.availableStock <= item.reorderLevel;
-                      const isCritical = item.availableStock <= item.reorderLevel / 2;
-                      const needed = item.reorderLevel * 2 - item.availableStock;
-
-                      return (
-                        <div key={item.id} className="flex justify-between items-center bg-[#03060d]/80 border border-slate-900 p-3.5 rounded-xl text-xs hover:border-slate-750 transition-all">
-                          <div className="min-w-0">
-                            <span className="font-bold text-slate-200 block truncate">{item.name}</span>
-                            <span className="text-[9px] text-slate-500 truncate block">{item.vendor}</span>
-                          </div>
-                          <div className="flex items-center gap-3 sm:gap-6 shrink-0">
-                            <div className="text-right">
-                              <span className={`font-bold block ${isCritical ? "text-rose-455" : isLow ? "text-amber-400" : "text-slate-300"}`}>
-                                {item.availableStock} Units
-                              </span>
-                              <span className="text-[9px] text-slate-550">Limit: {item.reorderLevel}</span>
-                            </div>
-                            
-                            <div className="w-24 sm:w-32 text-right">
-                              {isLow ? (
-                                <button
-                                  onClick={() => restockProduct(item.id, needed)}
-                                  className="px-2 py-1 bg-indigo-650/15 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-650 hover:text-slate-100 rounded text-[9px] font-semibold transition-all cursor-pointer"
-                                >
-                                  +{needed}
-                                </button>
-                              ) : (
-                                <span className="text-[10px] text-emerald-450 font-bold uppercase tracking-wider">Optimal</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
-              </div>
+              )
             )}
-
-            {/* Tab: Demand Forecasting */}
-            {activeTab === "forecasting" && (
-              <div className="space-y-6">
-                
-                {/* Modifiers */}
-                <div className="glow-card bg-[#0b101d]/60 border border-slate-800/60 rounded-2xl p-5 grid grid-cols-1 md:grid-cols-3 gap-6 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-                  
-                  {/* Sun Mod */}
-                  <div className="space-y-2">
-                    <span className="text-[10px] font-bold text-slate-455 flex items-center gap-1.5 uppercase tracking-wider">
-                      <Sun className="w-3.5 h-3.5 text-amber-505" />
-                      Temperature index
-                    </span>
-                    <input
-                      type="range"
-                      min="15"
-                      max="45"
-                      value={temperature}
-                      onChange={(e) => setTemperature(Number(e.target.value))}
-                      className="w-full h-1 bg-slate-850 rounded-lg appearance-none cursor-pointer accent-indigo-550"
-                    />
-                    <span className="text-[10px] text-slate-200 font-bold block text-right font-mono">{temperature}°C</span>
-                  </div>
-
-                  {/* Traffic Mod */}
-                  <div className="space-y-2">
-                    <span className="text-[10px] font-bold text-slate-455 flex items-center gap-1.5 uppercase tracking-wider">
-                      <Train className="w-3.5 h-3.5 text-indigo-455" />
-                      Passenger traffic
-                    </span>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="2.5"
-                      step="0.1"
-                      value={trafficIndex}
-                      onChange={(e) => setTrafficIndex(Number(e.target.value))}
-                      className="w-full h-1 bg-slate-850 rounded-lg appearance-none cursor-pointer accent-indigo-550"
-                    />
-                    <span className="text-[10px] text-slate-200 font-bold block text-right font-mono">{trafficIndex.toFixed(1)}x</span>
-                  </div>
-
-                  {/* Weekend toggler */}
-                  <div className="flex justify-between items-center border-t border-slate-850/60 pt-4 md:border-t-0 md:pt-0 md:border-l md:pl-6">
-                    <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">Weekend modifier</span>
-                    <button
-                      onClick={() => setIsWeekend(!isWeekend)}
-                      className={`w-9 h-5 rounded-full p-0.5 transition-all cursor-pointer ${
-                        isWeekend ? "bg-indigo-650 flex justify-end" : "bg-slate-800 flex justify-start"
-                      }`}
-                    >
-                      <span className="w-4 h-4 bg-slate-100 rounded-full shadow-md" />
-                    </button>
-                  </div>
-
-                </div>
-
-                {/* Graph */}
-                <div className="glow-card bg-[#0b101d]/60 border border-slate-800/60 rounded-2xl p-6 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-                  <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-6">AI Gross Sales Predictions</h3>
-                  <div className="h-64">
-                    {isMounted ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={revenueForecastData}>
-                          <defs>
-                            <linearGradient id="projColor" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
-                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(75,85,99,0.08)" vertical={false} />
-                          <XAxis dataKey="day" stroke="#4b5563" fontSize={10} tickLine={false} />
-                          <YAxis stroke="#4b5563" fontSize={10} tickLine={false} />
-                          <Tooltip contentStyle={{ backgroundColor: "#0f172a", borderColor: "#1e293b", fontSize: "11px" }} />
-                          <Area type="monotone" dataKey="Projected" stroke="#6366f1" strokeWidth={2} fillOpacity={1} fill="url(#projColor)" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full bg-slate-950/40 rounded-xl animate-pulse flex items-center justify-center text-xs text-slate-650 font-mono">
-                        Loading charts...
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-            )}
-
-            {/* Tab: Station Visibility */}
-            {activeTab === "stations" && (
-              <div className="space-y-6">
-                <div className="glow-card bg-[#0b101d]/60 border border-slate-800/60 rounded-2xl p-5 space-y-4 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-                  <div className="border-b border-slate-850 pb-3">
-                    <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Terminal Platform Map & Hotspots</h3>
-                    <p className="text-[10px] text-slate-500 mt-0.5">Real-time occupancy status levels.</p>
-                  </div>
-                  
-                  <div className="space-y-3 text-xs">
-                    <div className="bg-[#03060d]/80 border border-slate-900 p-4 rounded-xl flex items-center justify-between">
-                      <div>
-                        <strong className="text-slate-200 block">Platform 1-2 (Gatimaan Express)</strong>
-                        <span className="text-[10px] text-slate-500 mt-0.5 block">Estimated arrival: 12:45 PM • Delayed: 5 mins</span>
-                      </div>
-                      <span className="text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                        Normal flow
-                      </span>
-                    </div>
-
-                    <div className="bg-[#03060d]/80 border border-slate-900 p-4 rounded-xl flex items-center justify-between">
-                      <div>
-                        <strong className="text-slate-200 block">Platform 3-4 (Local Passenger trains)</strong>
-                        <span className="text-[10px] text-slate-500 mt-0.5 block">Shatabdi connection scheduled in 10 mins</span>
-                      </div>
-                      <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded font-bold uppercase tracking-wider animate-pulse">
-                        Slight bottleneck
-                      </span>
-                    </div>
-
-                    <div className="bg-[#03060d]/80 border border-slate-900 p-4 rounded-xl flex items-center justify-between">
-                      <div>
-                        <strong className="text-slate-200 block">Platform 5-8 (Rajdhani Express)</strong>
-                        <span className="text-[10px] text-slate-500 mt-0.5 block">Heavy peak boarding currently active</span>
-                      </div>
-                      <span className="text-[9px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2.5 py-0.5 rounded font-bold uppercase tracking-wider animate-ping">
-                        Peak queue alert
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Tab: Vendor Performance */}
-            {activeTab === "performance" && (
-              <div className="space-y-6">
-                <div className="glow-card bg-[#0b101d]/60 border border-slate-800/60 rounded-2xl p-5 space-y-4 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
-                  <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider border-b border-slate-850 pb-3">
-                    Active Kitchen SLA Latency Ratings
-                  </h3>
-                  
-                  <div className="space-y-3 text-xs">
-                    {vendors.map((v) => (
-                      <div key={v.id} className="flex justify-between items-center bg-[#03060d]/80 border border-slate-900 p-3.5 rounded-xl hover:border-slate-750 transition-all">
-                        <div>
-                          <span className="font-bold text-slate-200 block">{v.name}</span>
-                          <span className="text-[9px] text-slate-500">{v.station}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-bold text-indigo-400 block font-mono">{v.averageFulfillmentTime} mins avg</span>
-                          <span className="text-[10px] text-slate-455 block mt-0.5">⭐ {v.rating.toFixed(1)} / 5.0</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
           </div>
-        </div>
+        )}
 
-        {/* Right Panel: Inventory list & AI Chat Co-Pilot (responsive visibility) */}
-        <div className={`w-full md:w-[360px] bg-slate-950/60 flex-col h-full shrink-0 ${
-          activeMobileView === "stocks" ? "flex" : "hidden md:flex"
-        }`}>
-          
-          {/* Top Half: Inventory Stock Levels */}
-          <div className="flex-1 border-b border-slate-900 p-4 flex flex-col overflow-hidden">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">Live Stock Levels</span>
-            
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+        {/* SCREEN 2: Stocks (Inventory Planner) */}
+        {activeTab === "stocks" && (
+          <div className="h-full flex flex-col overflow-hidden p-4 space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-900/60 pb-3 shrink-0">
+              <div>
+                <h3 className="text-xs font-bold text-slate-205 uppercase tracking-wider">Replenishment Planner</h3>
+                <p className="text-[9px] text-slate-550 mt-0.5">Safety margins based on scheduled traffic.</p>
+              </div>
+              {lowStockItems.length > 0 && (
+                <button
+                  onClick={() => {
+                    lowStockItems.forEach(i => restockProduct(i.id, i.reorderLevel * 2 - i.availableStock));
+                  }}
+                  className="px-2.5 py-1 bg-indigo-650 hover:bg-indigo-600 text-slate-100 text-[9px] font-bold rounded uppercase tracking-wider transition-all"
+                >
+                  Restock All
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
               {filteredInventory.map((item) => {
                 const isLow = item.availableStock <= item.reorderLevel;
                 const isCritical = item.availableStock <= item.reorderLevel / 2;
+                const needed = item.reorderLevel * 2 - item.availableStock;
 
                 return (
-                  <div key={item.id} className="bg-slate-900/40 border border-slate-850/60 p-3 rounded-xl flex items-center justify-between text-xs glow-card hover:border-slate-700 transition-all">
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-slate-200">{item.name}</span>
-                        {isLow && (
-                          <span className={`w-1.5 h-1.5 rounded-full ${isCritical ? "bg-rose-500 animate-ping" : "bg-amber-500 animate-pulse"}`}></span>
+                  <div key={item.id} className="flex justify-between items-center bg-[#090d16]/80 border border-slate-850 p-3 rounded-xl text-xs glow-card">
+                    <div className="min-w-0">
+                      <span className="font-bold text-slate-200 block truncate">{item.name}</span>
+                      <span className="text-[9px] text-slate-500 block truncate">{item.vendor}</span>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <span className={`font-bold block ${isCritical ? "text-rose-455" : isLow ? "text-amber-400" : "text-slate-300"}`}>
+                          {item.availableStock} Units
+                        </span>
+                        <span className="text-[9px] text-slate-550 font-mono">Limit: {item.reorderLevel}</span>
+                      </div>
+                      
+                      <div className="w-16 text-right">
+                        {isLow ? (
+                          <button
+                            onClick={() => restockProduct(item.id, needed)}
+                            className="px-2 py-1 bg-indigo-650/15 text-indigo-400 border border-indigo-500/20 rounded text-[9px] font-semibold transition-all"
+                          >
+                            +{needed}
+                          </button>
+                        ) : (
+                          <span className="text-[9px] text-emerald-450 font-bold uppercase tracking-wider">Optimal</span>
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-500">{item.vendor}</span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <span className={`font-bold block ${isCritical ? "text-rose-455" : isLow ? "text-amber-400" : "text-slate-100"}`}>
-                          {item.availableStock} units
-                        </span>
-                        <span className="text-[9px] text-slate-550">Limit: {item.reorderLevel}</span>
-                      </div>
-                      <button
-                        onClick={() => restockProduct(item.id, 20)}
-                        className="px-2 py-1 bg-slate-950 hover:bg-slate-900 text-[9px] font-bold border border-slate-800 text-slate-350 hover:text-slate-200 rounded transition-all cursor-pointer"
-                      >
-                        +20
-                      </button>
                     </div>
                   </div>
                 );
               })}
             </div>
           </div>
+        )}
 
-          {/* Bottom Half: Mini AI Assistant Panel */}
-          <div className="h-[260px] p-4 flex flex-col overflow-hidden bg-slate-900/10 border-t border-slate-900/60">
-            <div className="flex items-center gap-1.5 border-b border-slate-900 pb-3 shrink-0 mb-3">
-              <Bot className="w-4 h-4 text-indigo-400 animate-pulse" />
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">AI Guidance Bot</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ml-auto animate-ping"></span>
-            </div>
-
-            {/* Quick Prompts */}
-            <div className="flex-1 overflow-y-auto flex flex-col justify-end space-y-3">
-              <div className="bg-slate-900 border border-slate-850 p-3 rounded-xl rounded-bl-none text-xs text-slate-300">
-                <p className="font-semibold text-indigo-405 flex items-center gap-1 mb-1">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                  Nexus Co-Pilot Insights
-                </p>
-                <p className="text-[11px] text-slate-450 leading-relaxed font-medium">Use the floating **AI Copilot** button at the bottom-right for full conversational audits.</p>
+        {/* SCREEN 3: AI Assist (Forecasting & Chatbot) */}
+        {activeTab === "ai" && (
+          <div className="h-full flex flex-col overflow-hidden">
+            
+            {/* Top modifiers (Forecasting sim) */}
+            <div className="p-4 border-b border-slate-900 bg-[#040812]/20 shrink-0 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Sparkles className="w-3.5 h-3.5 text-indigo-400" /> AI Forecasting modifiers</span>
+                <span className="text-[9px] text-slate-550 font-mono">Estimated mult: {mult.toFixed(1)}x</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[9px] font-semibold text-slate-450">
+                    <span>Temp</span>
+                    <span>{temperature}°C</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="15"
+                    max="45"
+                    value={temperature}
+                    onChange={(e) => setTemperature(Number(e.target.value))}
+                    className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-550"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[9px] font-semibold text-slate-450">
+                    <span>Bookings</span>
+                    <span>{trafficIndex.toFixed(1)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2.5"
+                    step="0.1"
+                    value={trafficIndex}
+                    onChange={(e) => setTrafficIndex(Number(e.target.value))}
+                    className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-550"
+                  />
+                </div>
               </div>
             </div>
+
+            {/* Chat area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-grid-dots relative">
+              {chatMessages.map((msg, idx) => (
+                <div key={idx} className={`flex gap-2 max-w-[85%] ${
+                  msg.sender === "user" ? "ml-auto flex-row-reverse" : "mr-auto"
+                }`}>
+                  <div className={`p-2 rounded-lg shrink-0 w-8 h-8 flex items-center justify-center ${
+                    msg.sender === "user" ? "bg-indigo-650/20 text-indigo-400 border border-indigo-500/20" : "bg-slate-900 border border-slate-800"
+                  }`}>
+                    {msg.sender === "user" ? <User className="w-3.5 h-3.5 text-indigo-300" /> : <Bot className="w-3.5 h-3.5 text-indigo-400" />}
+                  </div>
+                  <div className={`p-3 rounded-2xl ${
+                    msg.sender === "user" 
+                      ? "bg-indigo-650 text-slate-100 rounded-tr-none" 
+                      : "bg-[#090d16]/95 text-slate-205 rounded-tl-none border border-slate-850/80 shadow-md"
+                  }`}>
+                    {msg.sender === "user" ? (
+                      <p className="text-[11px] leading-normal">{msg.text}</p>
+                    ) : (
+                      <div>{renderMessageContent(msg.text)}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {isTyping && (
+                <div className="flex gap-2 max-w-[80%] mr-auto items-center">
+                  <div className="p-2 bg-slate-900 border border-slate-800 rounded-lg shrink-0 w-8 h-8 flex items-center justify-center">
+                    <Bot className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+                  </div>
+                  <div className="bg-[#090d16]/95 border border-slate-850/80 p-2.5 rounded-2xl rounded-tl-none flex gap-1 items-center">
+                    <span className="w-1 h-1 rounded-full bg-indigo-400 animate-bounce"></span>
+                    <span className="w-1 h-1 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.2s]"></span>
+                    <span className="w-1 h-1 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.4s]"></span>
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Chat Input form */}
+            <form onSubmit={handleChatSend} className="p-3 border-t border-slate-900 bg-[#040812]/20 flex gap-2 shrink-0">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ask Copilot (e.g. Predict tomorrow)"
+                className="flex-1 bg-slate-950 border border-slate-850 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-550 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="p-2 bg-indigo-650 hover:bg-indigo-600 text-slate-105 rounded-lg shadow-md border border-indigo-500/20 cursor-pointer"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+
           </div>
+        )}
 
-        </div>
+        {/* SCREEN 4: Config (Notion Sync & Connection settings) */}
+        {activeTab === "config" && (
+          <div className="h-full flex flex-col overflow-hidden p-4 space-y-5">
+            <div className="border-b border-slate-900/60 pb-3 shrink-0">
+              <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">Notion database mapping</h3>
+              <p className="text-[9px] text-slate-500 mt-0.5">Map API parameters to Notion pages.</p>
+            </div>
+
+            {isSettingsSaved && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg text-[10px] text-emerald-450 font-bold flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" />
+                Notion credentials saved successfully.
+              </div>
+            )}
+
+            <form onSubmit={handleSettingsSave} className="flex-1 overflow-y-auto space-y-4 pr-1">
+              <div>
+                <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Integration Token</label>
+                <input
+                  type="password"
+                  placeholder="secret_xxxxxxxxxxxxxxxxxx"
+                  value={notionToken}
+                  onChange={(e) => setNotionToken(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-250 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Orders DB ID</label>
+                <input
+                  type="text"
+                  placeholder="db_orders_ndls_xxx"
+                  value={ordersDbId}
+                  onChange={(e) => setOrdersDbId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-250 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Inventory DB ID</label>
+                <input
+                  type="text"
+                  placeholder="db_inventory_ndls_xxx"
+                  value={inventoryDbId}
+                  onChange={(e) => setInventoryDbId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-250 focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-slate-100 rounded-lg text-xs font-bold shadow border border-indigo-400/20 cursor-pointer"
+              >
+                Save configurations
+              </button>
+            </form>
+
+            <div className="bg-slate-900/40 border border-slate-850 p-3.5 rounded-2xl space-y-2">
+              <span className="text-[8px] bg-slate-950 text-slate-500 border border-slate-900 px-1.5 py-0.5 rounded font-extrabold uppercase tracking-widest block w-fit">
+                Sync telemetry status
+              </span>
+              <p className="text-[10px] text-slate-450 leading-relaxed">
+                Database synchronization maps <strong>Title</strong> parameters to PNR codes and <strong>Relation</strong> parameters to inventory assets.
+              </p>
+            </div>
+          </div>
+        )}
 
       </div>
 
-      {/* Mobile Sticky Bottom Tab Bar */}
-      <div className="h-16 border-t border-slate-900 bg-[#070a13]/90 backdrop-blur-md flex items-center justify-around md:hidden shrink-0 z-30 px-4">
+      {/* Sticky Bottom Native Tab Bar */}
+      <nav className="h-16 border-t border-slate-900 bg-[#040812]/95 backdrop-blur-md flex items-center justify-around shrink-0 z-30 px-3 pb-2">
         <button
-          onClick={() => setActiveMobileView("queue")}
-          className={`flex flex-col items-center gap-1.5 transition-colors cursor-pointer ${
-            activeMobileView === "queue" ? "text-indigo-400 font-bold" : "text-slate-500 hover:text-slate-400"
+          onClick={() => {
+            setActiveTab("orders");
+            setSelectedOrderId(null); // Reset detail stack when tapping tab
+          }}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            activeTab === "orders" ? "text-indigo-400 font-extrabold" : "text-slate-500 hover:text-slate-400"
           }`}
         >
-          <ShoppingCart className="w-5 h-5" />
-          <span className="text-[9px] uppercase tracking-wider font-bold">Queue</span>
+          <ShoppingCart className="w-4.5 h-4.5" />
+          <span className="text-[8px] uppercase tracking-widest">Orders</span>
         </button>
         
         <button
-          onClick={() => setActiveMobileView("details")}
-          className={`flex flex-col items-center gap-1.5 transition-colors cursor-pointer ${
-            activeMobileView === "details" ? "text-indigo-400 font-bold" : "text-slate-500 hover:text-slate-400"
+          onClick={() => setActiveTab("stocks")}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            activeTab === "stocks" ? "text-indigo-400 font-extrabold" : "text-slate-500 hover:text-slate-400"
           }`}
         >
-          <Compass className="w-5 h-5" />
-          <span className="text-[9px] uppercase tracking-wider font-bold">Details</span>
+          <Package className="w-4.5 h-4.5" />
+          <span className="text-[8px] uppercase tracking-widest">Stocks</span>
         </button>
         
         <button
-          onClick={() => setActiveMobileView("stocks")}
-          className={`flex flex-col items-center gap-1.5 transition-colors cursor-pointer ${
-            activeMobileView === "stocks" ? "text-indigo-400 font-bold" : "text-slate-500 hover:text-slate-400"
+          onClick={() => setActiveTab("ai")}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            activeTab === "ai" ? "text-indigo-400 font-extrabold" : "text-slate-500 hover:text-slate-400"
           }`}
         >
-          <Package className="w-5 h-5" />
-          <span className="text-[9px] uppercase tracking-wider font-bold">Stocks</span>
+          <Sparkles className="w-4.5 h-4.5" />
+          <span className="text-[8px] uppercase tracking-widest">AI Assist</span>
         </button>
-      </div>
+        
+        <button
+          onClick={() => setActiveTab("config")}
+          className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            activeTab === "config" ? "text-indigo-400 font-extrabold" : "text-slate-500 hover:text-slate-400"
+          }`}
+        >
+          <Settings className="w-4.5 h-4.5" />
+          <span className="text-[8px] uppercase tracking-widest">Config</span>
+        </button>
+      </nav>
 
       {/* Simulator Modal */}
       {showSimModal && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center px-4">
-          <div className="bg-[#0b101d] border border-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl relative glow-card">
-            <h2 className="text-xs font-bold text-slate-100 flex items-center gap-2 mb-1 uppercase tracking-wider">
-              <Cpu className="w-4 h-4 text-indigo-400" />
-              Deploy Simulated Order
+        <div className="absolute inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center px-4">
+          <div className="bg-[#0b101d] border border-slate-800 p-5 rounded-2xl w-full max-w-xs shadow-2xl relative glow-card">
+            <h2 className="text-xs font-bold text-slate-100 flex items-center gap-1.5 mb-1 uppercase tracking-wider">
+              <Cpu className="w-4 h-4 text-indigo-405" />
+              Simulate booking
             </h2>
-            <p className="text-[11px] text-slate-400 mb-6">Create a live booking to verify inventory updates and packaging logs.</p>
+            <p className="text-[10px] text-slate-450 mb-4">Deploy simulated train bookings.</p>
             
-            <form onSubmit={handleSimulateOrder} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleSimulateOrder} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">PNR Number</label>
+                  <label className="text-[8px] font-bold text-slate-500 uppercase block mb-0.5">PNR</label>
                   <input
                     type="text"
                     required
                     value={simPnr}
                     onChange={(e) => setSimPnr(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Train ID</label>
+                  <label className="text-[8px] font-bold text-slate-550 uppercase block mb-0.5">Train ID</label>
                   <input
                     type="text"
                     required
                     value={simTrainNum}
                     onChange={(e) => setSimTrainNum(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Train Name</label>
+                  <label className="text-[8px] font-bold text-slate-500 block mb-0.5">Coach</label>
                   <input
                     type="text"
-                    value={simTrainName}
-                    onChange={(e) => setSimTrainName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
+                    placeholder="C2"
+                    required
+                    value={simCoach}
+                    onChange={(e) => setSimCoach(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Coach / Seat</label>
-                  <div className="flex gap-1.5">
-                    <input
-                      type="text"
-                      placeholder="C2"
-                      required
-                      value={simCoach}
-                      onChange={(e) => setSimCoach(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-1 py-1.5 text-xs text-slate-200 focus:outline-none text-center"
-                    />
-                    <input
-                      type="text"
-                      placeholder="35"
-                      required
-                      value={simSeat}
-                      onChange={(e) => setSimSeat(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-1 py-1.5 text-xs text-slate-200 focus:outline-none text-center"
-                    />
-                  </div>
+                  <label className="text-[8px] font-bold text-slate-550 block mb-0.5">Seat</label>
+                  <input
+                    type="text"
+                    placeholder="35"
+                    required
+                    value={simSeat}
+                    onChange={(e) => setSimSeat(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-1 py-1 text-xs text-slate-200 focus:outline-none text-center"
+                  />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Product Item</label>
+                  <label className="text-[8px] font-bold text-slate-500 block mb-0.5">Product</label>
                   <select
                     value={simProduct}
                     onChange={(e) => setSimProduct(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-slate-200 focus:outline-none"
                   >
                     {Object.keys(PRODUCT_PRICES).map((k) => (
-                      <option key={k} value={k}>{k} (₹{PRODUCT_PRICES[k]})</option>
+                      <option key={k} value={k}>{k}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Qty</label>
+                  <label className="text-[8px] font-bold text-slate-500 block mb-0.5">Qty</label>
                   <input
                     type="number"
                     min="1"
                     required
                     value={simQty}
                     onChange={(e) => setSimQty(Number(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-1.5 py-1 text-xs text-slate-200 focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="flex gap-3 justify-end pt-4">
+              <div className="flex gap-2.5 justify-end pt-3">
                 <button
                   type="button"
                   onClick={() => setShowSimModal(false)}
-                  className="px-4 py-2 border border-slate-800 text-slate-405 hover:text-slate-205 text-xs font-semibold rounded-lg hover:bg-slate-950 transition-all cursor-pointer"
+                  className="px-3 py-1.5 border border-slate-800 text-slate-400 text-[10px] font-semibold rounded hover:bg-slate-950 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-650 hover:bg-indigo-500 text-slate-100 text-xs font-bold rounded-lg shadow-lg transition-all cursor-pointer"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-slate-100 text-[10px] font-bold rounded shadow transition-all cursor-pointer"
                 >
-                  Deploy Order
+                  Deploy
                 </button>
               </div>
             </form>
